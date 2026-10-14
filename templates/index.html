@@ -12,7 +12,11 @@
 <header class="top">
   <h1>FTO Audit — Team Portal<small>MARIGOLD AVIATION</small></h1>
   <div class="tb">
+    {% if user %}
+    <span style="font-size:12px;opacity:0.9;padding:6px 10px;background:rgba(255,255,255,0.12);border-radius:6px;display:inline-flex;align-items:center;">👤 {{ user.name }} ({{ user.role }})</span>
+    {% endif %}
     <a href="/api/export-excel" class="btn hl" style="text-decoration:none">📊 Download Excel Report</a>
+    <a href="/logout" class="btn" style="text-decoration:none;background:rgba(255,255,255,0.15);color:#fff" title="Sign out of Microsoft 365">🚪 Sign out</a>
   </div>
 </header>
 

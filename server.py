@@ -8,13 +8,32 @@ import sys
 # Ensure UTF-8 output on Windows
 sys.stdout.reconfigure(encoding='utf-8')
 
-from flask import Flask, request, jsonify, render_template, send_from_directory, send_file, redirect, url_for
+from flask import Flask, request, jsonify, render_template, send_from_directory, send_file, redirect, url_for, session, render_template_string
+import msal
 from excel_sync import generate_audit_excel
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "marigold_fto_audit_sso_secret_2026_xyz")
+app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=7)
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max payload
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Load local .env if present
+env_file = os.path.join(BASE_DIR, ".env")
+if os.path.exists(env_file):
+    with open(env_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
+
+AZURE_CLIENT_ID = os.environ.get("AZURE_CLIENT_ID", "95aaa257-5e66-4b77-82c7-a22376ad0d8b")
+AZURE_TENANT_ID = os.environ.get("AZURE_TENANT_ID", "04009f21-9442-496d-8d50-a3722ad71fbd")
+AZURE_CLIENT_SECRET = os.environ.get("AZURE_CLIENT_SECRET", "")
+AUTHORITY = f"https://login.microsoftonline.com/{AZURE_TENANT_ID}"
+SCOPES = ["User.Read"]
 LOCAL_ONEDRIVE = r"C:\Users\sunny\OneDrive - Marigold Aviation\Apps\Anitgravity\Audit Trail"
 if os.path.exists(LOCAL_ONEDRIVE):
     ONEDRIVE_DIR = LOCAL_ONEDRIVE
@@ -146,31 +165,209 @@ def save_current_state(state):
         
     return now
 
+def _build_msal_app(cache=None):
+    return msal.ConfidentialClientApplication(
+        AZURE_CLIENT_ID,
+        authority=AUTHORITY,
+        client_credential=AZURE_CLIENT_SECRET,
+        token_cache=cache
+    )
+
+def get_redirect_uri():
+    host = request.headers.get("X-Forwarded-Host", request.host)
+    proto = request.headers.get("X-Forwarded-Proto", "https" if ("onrender.com" in host or "trycloudflare.com" in host) else request.scheme)
+    return f"{proto}://{host}/login/callback"
+
+def get_authorized_team():
+    state = get_current_state()
+    team = state.get("lists", {}).get("team", [])
+    if not team:
+        return [
+            {"name": "Srinivas Rao", "email": "srinivas.rao@mgavia.com", "role": "Lead Auditor"},
+            {"name": "Sunny Sharma", "email": "sunny.sharma@mgavia.com", "role": "Auditor"}
+        ]
+    return team
+
+def find_authorized_user(email):
+    if not email:
+        return None
+    email_clean = email.strip().lower()
+    team = get_authorized_team()
+    for i, m in enumerate(team):
+        if m.get("email", "").strip().lower() == email_clean:
+            is_lead = "lead" in m.get("role", "").lower() or i == 0
+            return {
+                "name": m.get("name") or email_clean.split("@")[0].title(),
+                "email": email_clean,
+                "role": "Lead Auditor" if is_lead else "Auditor",
+                "route": "/master" if is_lead else f"/auditor{i if i > 0 else 1}",
+                "index": i
+            }
+    return None
+
+LOGIN_PAGE_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign In — Marigold Aviation FTO Audit Portal</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body { display:flex; min-height:100vh; align-items:center; justify-content:center; background:#0f2744; margin:0; padding:20px; box-sizing:border-box; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  .login-card { background:#fff; border-radius:14px; padding:40px 32px; width:100%; max-width:440px; box-shadow:0 16px 40px rgba(0,0,0,0.3); text-align:center; }
+  .logo-title { font-size:18px; font-weight:800; color:#0f2744; letter-spacing:0.04em; text-transform:uppercase; margin:12px 0 4px; }
+  .sub-title { font-size:13px; color:#5d6b7a; margin-bottom:28px; line-height:1.5; }
+  .ms-btn { display:inline-flex; align-items:center; justify-content:center; gap:12px; width:100%; background:#2f2f2f; color:#fff; text-decoration:none; padding:14px 20px; border-radius:8px; font-size:15px; font-weight:600; transition:background 0.2s; box-sizing:border-box; }
+  .ms-btn:hover { background:#1b1b1b; }
+  .ms-logo { width:20px; height:20px; }
+  .sec-note { margin-top:28px; font-size:11px; color:#8898aa; line-height:1.5; border-top:1px solid #eef2f6; padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="login-card">
+  <div style="font-size:32px">✈️</div>
+  <div class="logo-title">Marigold Aviation</div>
+  <div style="font-weight:700;font-size:15px;color:#1f4e79;margin-bottom:6px">FTO Audit & Compliance Portal</div>
+  <div class="sub-title">Flight Training Organisation Due Diligence, Safety & Regulatory Governance</div>
+  
+  <a href="/login/ms" class="ms-btn">
+    <svg class="ms-logo" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+    Sign in with Microsoft 365
+  </a>
+
+  <div class="sec-note">
+    🔒 <b>Protected Enterprise Resource</b><br>
+    Access is strictly restricted to designated auditors with corporate Microsoft accounts (<code>@mgavia.com</code>).
+  </div>
+</div>
+</body>
+</html>"""
+
+ACCESS_DENIED_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Access Denied — Marigold Aviation</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body { display:flex; min-height:100vh; align-items:center; justify-content:center; background:#f4f5f7; margin:0; padding:20px; box-sizing:border-box; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  .card { background:#fff; border-radius:12px; padding:36px 32px; width:100%; max-width:480px; box-shadow:0 8px 24px rgba(0,0,0,0.1); text-align:center; border:1px solid #e5e7eb; }
+  .badge-denied { display:inline-block; padding:4px 12px; background:#fee2e2; color:#b91c1c; border-radius:20px; font-size:12px; font-weight:700; margin-bottom:12px; }
+  .email-box { background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px 12px; font-weight:600; color:#1e293b; font-size:13px; margin:16px 0; word-break:break-all; }
+</style>
+</head>
+<body>
+<div class="card">
+  <span class="badge-denied">⛔ ACCESS DENIED</span>
+  <h2 style="margin:4px 0 10px;color:#111827">Account Not Authorized</h2>
+  <p style="color:#4b5563;font-size:13px;line-height:1.6">You successfully authenticated via Microsoft, but your account is not on the active FTO Audit Team whitelist:</p>
+  <div class="email-box">{{ email }}</div>
+  <p style="font-size:12px;color:#6b7280;line-height:1.6">If you are an assigned auditor, please request the Lead Auditor (<b>Srinivas Rao</b> · <a href="mailto:srinivas.rao@mgavia.com">srinivas.rao@mgavia.com</a>) to add your email to the governance register.</p>
+  <div style="margin-top:20px">
+    <a href="/logout" class="btn" style="text-decoration:none;display:inline-block">Sign in with a different account</a>
+  </div>
+</div>
+</body>
+</html>"""
+
+@app.route("/login")
+def login_view():
+    if session.get("user"):
+        return redirect(session["user"].get("route", "/"))
+    return render_template_string(LOGIN_PAGE_HTML)
+
+@app.route("/login/ms")
+def login_ms():
+    msal_app = _build_msal_app()
+    redirect_uri = get_redirect_uri()
+    auth_state = os.urandom(16).hex()
+    session["auth_state"] = auth_state
+    auth_url = msal_app.get_authorization_request_url(
+        scopes=SCOPES,
+        state=auth_state,
+        redirect_uri=redirect_uri
+    )
+    return redirect(auth_url)
+
+@app.route("/login/callback")
+def login_callback():
+    code = request.args.get("code")
+    state = request.args.get("state")
+    if not code or state != session.get("auth_state"):
+        return redirect(url_for("login_view"))
+        
+    redirect_uri = get_redirect_uri()
+    msal_app = _build_msal_app()
+    result = msal_app.acquire_token_by_authorization_code(
+        code=code,
+        scopes=SCOPES,
+        redirect_uri=redirect_uri
+    )
+    
+    if "error" in result:
+        print(f"[Azure Auth Error] {result.get('error')}: {result.get('error_description')}")
+        return f"<h3>Authentication Failed</h3><p>{result.get('error_description')}</p><p><a href='/login'>Try Again</a></p>", 400
+        
+    claims = result.get("id_token_claims", {})
+    email = (claims.get("preferred_username") or claims.get("email") or claims.get("upn") or "").strip().lower()
+    name = claims.get("name") or email.split("@")[0].title()
+    
+    auth_user = find_authorized_user(email)
+    if not auth_user:
+        return render_template_string(ACCESS_DENIED_HTML, email=email), 403
+        
+    session.permanent = True
+    session["user"] = auth_user
+    return redirect(auth_user["route"])
+
+@app.route("/logout")
+def logout_view():
+    session.clear()
+    return redirect(url_for("login_view"))
+
+@app.before_request
+def enforce_azure_auth():
+    path = request.path
+    if path.startswith("/static/") or path in ["/login", "/login/ms", "/login/callback", "/logout", "/health"]:
+        return None
+        
+    user = session.get("user")
+    if not user:
+        return redirect(url_for("login_view"))
+        
+    # Role protection: Auditor cannot access /master
+    if path == "/master" and user.get("role") != "Lead Auditor":
+        return redirect(user.get("route", "/auditor1"))
+
 # ----------------------------------------------------
 # 3 Canonical Roles (Master, Auditor 1, Auditor 2)
 # ----------------------------------------------------
 @app.route("/")
 def index():
-    return render_template("index.html", mode="portal", role_label="Portal")
+    return render_template("index.html", mode="portal", role_label="Portal", user=session.get("user"))
 
 @app.route("/master")
 def master_view():
-    cfg = {"mode": "master"}
-    return render_template("index.html", mode="master", role_label="Master Dashboard", cfg=json.dumps(cfg), pdfw_content=PDFW_CONTENT)
+    user = session.get("user", {})
+    cfg = {"mode": "master", "currentUser": user}
+    return render_template("index.html", mode="master", role_label="Master Dashboard", cfg=json.dumps(cfg), pdfw_content=PDFW_CONTENT, user=user)
 
 @app.route("/auditor<int:num>")
 def auditor_n_view(num):
+    user = session.get("user", {})
     cfg = {
         "mode": "auditor",
         "instanceId": f"A{num}",
+        "currentUser": user,
         "me": {
-            "name": "",
+            "name": user.get("name", ""),
             "role": "Auditor",
             "label": f"Auditor {num}",
             "sections": []
         }
     }
-    return render_template("index.html", mode="auditor", role_label=f"Auditor {num}", cfg=json.dumps(cfg), pdfw_content=PDFW_CONTENT)
+    return render_template("index.html", mode="auditor", role_label=f"Auditor {num}", cfg=json.dumps(cfg), pdfw_content=PDFW_CONTENT, user=user)
 
 @app.route("/auditor1")
 def auditor1_view():

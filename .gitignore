@@ -3,3 +3,4 @@ __pycache__/
 cloudflared.exe
 .DS_Store
 Thumbs.db
+.env
