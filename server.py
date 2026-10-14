@@ -178,13 +178,19 @@ def get_redirect_uri():
     proto = request.headers.get("X-Forwarded-Proto", "https" if ("onrender.com" in host or "trycloudflare.com" in host) else request.scheme)
     return f"{proto}://{host}/login/callback"
 
+# Permanent Fail-Safe Administrators: CANNOT be locked out even if team list is deleted
+PERMANENT_ADMINS = {
+    "srinivas.rao@mgavia.com": {"name": "Srinivas Rao", "role": "Lead Auditor", "route": "/master", "index": 0},
+    "sunny.sharma@mgavia.com": {"name": "Sunny Sharma", "role": "Lead Auditor", "route": "/master", "index": 0}
+}
+
 def get_authorized_team():
     state = get_current_state()
     team = state.get("lists", {}).get("team", [])
     if not team:
         return [
-            {"name": "Srinivas Rao", "email": "srinivas.rao@mgavia.com", "role": "Lead Auditor"},
-            {"name": "Sunny Sharma", "email": "sunny.sharma@mgavia.com", "role": "Auditor"}
+            {"name": "Srinivas Rao", "email": "srinivas.rao@mgavia.com", "role": "Lead Auditor", "base": "All Aerodromes"},
+            {"name": "Sunny Sharma", "email": "sunny.sharma@mgavia.com", "role": "Auditor", "base": "All Aerodromes"}
         ]
     return team
 
@@ -192,6 +198,8 @@ def find_authorized_user(email):
     if not email:
         return None
     email_clean = email.strip().lower()
+    
+    # 1. Check active database team list
     team = get_authorized_team()
     for i, m in enumerate(team):
         if m.get("email", "").strip().lower() == email_clean:
@@ -203,6 +211,27 @@ def find_authorized_user(email):
                 "route": "/master" if is_lead else f"/auditor{i if i > 0 else 1}",
                 "index": i
             }
+            
+    # 2. Permanent Fail-Safe Fallback: Auto-heal if accidentally deleted
+    if email_clean in PERMANENT_ADMINS:
+        admin_info = PERMANENT_ADMINS[email_clean].copy()
+        try:
+            state = get_current_state()
+            if "lists" not in state: state["lists"] = {}
+            if "team" not in state["lists"]: state["lists"]["team"] = []
+            if not any(t.get("email", "").strip().lower() == email_clean for t in state["lists"]["team"]):
+                state["lists"]["team"].insert(0, {
+                    "name": admin_info["name"],
+                    "email": email_clean,
+                    "role": "Lead Auditor",
+                    "base": "All Aerodromes"
+                })
+                save_current_state(state)
+                print(f"[Self-Healing Auth] Restored {admin_info['name']} ({email_clean}) to team table.")
+        except Exception as e:
+            print(f"[Self-Healing Notice] {e}")
+        return admin_info
+
     return None
 
 LOGIN_PAGE_HTML = """<!DOCTYPE html>
