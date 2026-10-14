@@ -15,12 +15,17 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max payload
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ONEDRIVE_DIR = r"C:\Users\sunny\OneDrive - Marigold Aviation\Apps\Anitgravity\Audit Trail"
+LOCAL_ONEDRIVE = r"C:\Users\sunny\OneDrive - Marigold Aviation\Apps\Anitgravity\Audit Trail"
+if os.path.exists(LOCAL_ONEDRIVE):
+    ONEDRIVE_DIR = LOCAL_ONEDRIVE
+else:
+    ONEDRIVE_DIR = os.environ.get("AUDIT_TRAIL_DIR", os.path.join(BASE_DIR, "Audit_Trail"))
 EVIDENCE_DIR = os.path.join(ONEDRIVE_DIR, "Evidence")
 EXCEL_PATH = os.path.join(ONEDRIVE_DIR, "FTO_Audit_Consolidated.xlsx")
 DB_PATH = os.path.join(BASE_DIR, "fto_audit.db")
 
 os.makedirs(EVIDENCE_DIR, exist_ok=True)
+os.makedirs(ONEDRIVE_DIR, exist_ok=True)
 
 PDFW_PATH = os.path.join(BASE_DIR, "static", "pdfw.js")
 PDFW_CONTENT = ""
@@ -291,6 +296,6 @@ if __name__ == "__main__":
     print(f"Auditor 1:        http://localhost:8000/auditor1")
     print(f"Auditor 2:        http://localhost:8000/auditor2")
     print(f"OneDrive Path:    {ONEDRIVE_DIR}")
-    print("="*60 + "\n")
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port, debug=False)
 
