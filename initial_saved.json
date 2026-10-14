@@ -1,0 +1,164 @@
+{
+  "savedAt": "2026-10-14T19:30:19.897987",
+  "state": {
+    "v": 2,
+    "meta": {
+      "auditingOrg": "Marigold Aviation",
+      "auditedOrg": "",
+      "approvalNo": "",
+      "from": "2026-10-14",
+      "to": "2026-10-14",
+      "title": "Operational, Safety and Regulatory Due Diligence Audit",
+      "type": "Operational, safety, engineering and quality due diligence audit",
+      "framework": "DGCA India FTO requirements, applicable CARs and international best practice",
+      "status": "Draft",
+      "classification": "Confidential \u2013 Commercial in Confidence",
+      "distribution": "Management of the commissioning organisation. Confidential \u2013 not for onward distribution without written authorisation."
+    },
+    "text": {
+      "purpose": "Comprehensive operational, regulatory, safety and quality due diligence audit of the Flying Training Organisation.",
+      "exec": "",
+      "themes": "",
+      "conclusion": ""
+    },
+    "lists": {
+      "locations": [
+        {
+          "name": "Main Base",
+          "state": "",
+          "status": "Audited"
+        }
+      ],
+      "team": [
+        {
+          "name": "Srinivas Rao",
+          "email": "srinivas.rao@mgavia.com",
+          "role": "Lead Auditor",
+          "base": "All Aerodromes"
+        },
+        {
+          "name": "Sunny Sharma",
+          "email": "Sunny.Sharma@mgavia.com",
+          "role": "Auditor",
+          "base": "All Aerodromes"
+        }
+      ],
+      "personnel": [],
+      "cadre": [],
+      "fleet": []
+    },
+    "secs": {
+      "ORG": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      },
+      "FO": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      },
+      "SMS": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      },
+      "FDM": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      },
+      "ATS": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      },
+      "TRG": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      },
+      "QA": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      },
+      "ENG": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      },
+      "CAM": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      },
+      "FLT": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      },
+      "INF": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      },
+      "ACC": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      },
+      "NB": {
+        "on": true,
+        "auditor": "",
+        "auditor2": "",
+        "comment": "",
+        "att": [],
+        "custom": []
+      }
+    },
+    "items": {},
+    "files": {},
+    "genAtt": [],
+    "imports": [],
+    "inputs": {},
+    "me": null,
+    "fileSavedAt": "2026-10-14T19:30:19.897987"
+  }
+}

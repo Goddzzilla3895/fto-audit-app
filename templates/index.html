@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FTO Audit — {{ role_label }}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+{% if mode == 'portal' %}
+<header class="top">
+  <h1>FTO Audit — Team Portal<small>MARIGOLD AVIATION</small></h1>
+  <div class="tb">
+    <a href="/api/export-excel" class="btn hl" style="text-decoration:none">📊 Download Excel Report</a>
+  </div>
+</header>
+
+<div style="max-width:860px;margin:30px auto;padding:0 20px;">
+  <div class="card">
+    <h2 style="color:var(--acc);margin-top:0">FTO Audit Workspaces</h2>
+    <p class="sub">Select your designated auditor role. All work is automatically saved in real time to the central database and synchronized with your OneDrive folder and Excel report.</p>
+    
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:16px;">
+      <a href="/master" class="card" style="text-decoration:none;color:inherit;border:2px solid var(--line);transition:border-color .2s;cursor:pointer;" onmouseover="this.style.borderColor='var(--acc)'" onmouseout="this.style.borderColor='var(--line)'">
+        <b style="display:block;font-size:16px;color:var(--acc);margin-bottom:6px">👑 Master Auditor</b>
+        <div style="font-size:12px;color:var(--mute)">Lead Auditor dashboard. Complete 13-section oversight, auditor input integration, divergence resolution, executive summary, Word (.docx) report, and print/PDF report.</div>
+      </a>
+
+      <a href="/auditor1" class="card" style="text-decoration:none;color:inherit;border:2px solid var(--line);transition:border-color .2s;cursor:pointer;" onmouseover="this.style.borderColor='var(--acc)'" onmouseout="this.style.borderColor='var(--line)'">
+        <b style="display:block;font-size:16px;color:var(--acc);margin-bottom:6px">📋 Auditor 1</b>
+        <div style="font-size:12px;color:var(--mute)">Assigned Sections: <b>ORG</b> (Organisation), <b>FO</b> (Flight Operations), <b>SMS</b> (Safety Management), <b>FDM</b> (Flight Data), <b>ATS</b> (Air Traffic).</div>
+      </a>
+
+      <a href="/auditor2" class="card" style="text-decoration:none;color:inherit;border:2px solid var(--line);transition:border-color .2s;cursor:pointer;" onmouseover="this.style.borderColor='var(--acc)'" onmouseout="this.style.borderColor='var(--line)'">
+        <b style="display:block;font-size:16px;color:var(--acc);margin-bottom:6px">📋 Auditor 2</b>
+        <div style="font-size:12px;color:var(--mute)">Assigned Sections: <b>TRG</b> (Training), <b>QA</b> (Quality Assurance), <b>ACC</b> (Cadet Accommodation), <b>NB</b> (Proposed / New Base Readiness).</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3 style="margin-top:0">📁 Active OneDrive Sync Folders</h3>
+    <div style="font-size:12px;color:var(--mute);line-height:1.7;">
+      • <b>Consolidated Excel File:</b> <code>C:\Users\sunny\OneDrive - Marigold Aviation\Apps\Anitgravity\Audit Trail\FTO_Audit_Consolidated.xlsx</code><br>
+      • <b>Evidence Photos & Files:</b> <code>C:\Users\sunny\OneDrive - Marigold Aviation\Apps\Anitgravity\Audit Trail\Evidence\</code>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<header class="top"></header>
+<div class="mnav" id="mnav"></div>
+<div class="layout"><nav class="side" id="side"></nav><main id="main"></main></div>
+<div class="toast" id="toast"></div>
+<div class="modal" id="zoom"><img id="zimg" alt=""></div>
+<div class="pbar" id="printBar"><b>Preparing report…</b><button class="btn pri" id="printGo">🖨 Print / Save as PDF</button><button class="btn" id="printX">Cancel</button><div class="help">In the print dialog choose <b>Save as PDF</b> as the destination.</div></div>
+<div id="print"></div>
+
+<!-- Embedded PDF Worker Script -->
+<script type="text/plain" id="pdfw">{{ pdfw_content | safe }}</script>
+<script src="/static/pdf.min.js"></script>
+<script src="/static/docx.min.js"></script>
+<script id="cfg">window.CFG = {{ cfg | safe }};</script>
+<script id="saved">window.SAVED = null;</script>
+<script src="/static/master_data.js"></script>
+<script src="/static/app_logic.js"></script>
+{% endif %}
+
+</body>
+</html>
