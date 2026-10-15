@@ -218,8 +218,8 @@ def generate_audit_excel(state_data, output_path, evidence_dir):
         m_email = member.get("email", "")
         m_base = member.get("base", "All Aerodromes")
         
-        # Calculate active assigned sections for this member
-        assigned_secs = [sid for sid, sdata in secs.items() if sdata.get("on") and (sdata.get("auditor", "").strip().lower() == m_name.lower())]
+        # Calculate active assigned sections for this member (supports multi-auditor lists)
+        assigned_secs = [sid for sid, sdata in secs.items() if sdata.get("on") and (m_name.lower() in [a.strip().lower() for a in (sdata.get("auditor", "") + "," + sdata.get("auditor2", "")).split(",") if a.strip()])]
         if m_role == "Lead Auditor":
             sec_rights_str = "All Sections (Lead Oversight & Sign-Off)"
         elif assigned_secs:

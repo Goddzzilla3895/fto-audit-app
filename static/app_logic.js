@@ -1,4 +1,54 @@
 
+function getSecAuditors(sid) {
+  const s = S.secs && S.secs[sid];
+  if (!s) return [];
+  if (Array.isArray(s.auditors)) {
+    return s.auditors.map(a => (a || '').trim()).filter(Boolean);
+  }
+  if (s.auditor) {
+    return s.auditor.split(/[,&]/).map(a => a.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function hasSecAuditor(sid, name) {
+  if (!name) return false;
+  const list = getSecAuditors(sid).map(a => a.toLowerCase());
+  return list.includes(name.trim().toLowerCase());
+}
+
+function setSecAuditorToggle(sid, name) {
+  if (!name) return;
+  const target = name.trim();
+  let list = getSecAuditors(sid);
+  const idx = list.findIndex(a => a.toLowerCase() === target.toLowerCase());
+  if (idx >= 0) {
+    list.splice(idx, 1);
+  } else {
+    list.push(target);
+  }
+  if (!S.secs[sid]) S.secs[sid] = {on: true, auditor: '', att: [], custom: []};
+  S.secs[sid].auditors = list;
+  S.secs[sid].auditor = list.join(', ');
+}
+
+function setAuditorAllSecs(name, enableAll = true) {
+  if (!name) return;
+  const target = name.trim();
+  SECTIONS.forEach(s => {
+    let list = getSecAuditors(s.id);
+    const idx = list.findIndex(a => a.toLowerCase() === target.toLowerCase());
+    if (enableAll && idx < 0) {
+      list.push(target);
+    } else if (!enableAll && idx >= 0) {
+      list.splice(idx, 1);
+    }
+    if (!S.secs[s.id]) S.secs[s.id] = {on: true, auditor: '', att: [], custom: []};
+    S.secs[s.id].auditors = list;
+    S.secs[s.id].auditor = list.join(', ');
+  });
+}
+
 function teamRightsTable() {
   const rows = S.lists.team || [];
   const host = window.location.origin;
@@ -11,7 +61,7 @@ function teamRightsTable() {
             <th style="width:170px">Email ID</th>
             <th style="width:110px">Role</th>
             <th style="width:140px">Assigned Aerodrome(s)</th>
-            <th style="width:280px">Assigned Section Rights (Click to Toggle)</th>
+            <th style="width:330px">Assigned Section Rights (Independent Multi-Auditor)</th>
             <th style="width:100px">Access Link</th>
             <th style="width:35px"></th>
           </tr>
@@ -35,11 +85,15 @@ function teamRightsTable() {
                 </select>
               </td>
               <td>
-                <div style="display:flex;flex-wrap:wrap;gap:4px">
+                <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">
                   ${SECTIONS.map(s => {
-                    const isAssigned = (r.name && (S.secs[s.id].auditor || '').trim().toLowerCase() === r.name.trim().toLowerCase());
+                    const isAssigned = r.name && hasSecAuditor(s.id, r.name);
                     return `<button type="button" class="btn sm ${isAssigned ? 'pri' : ''}" style="padding:2px 6px;font-size:11px" data-toggle-sec="${i}|${s.id}" title="${esc(s.title)}">${s.id} ${isAssigned ? '✓' : ''}</button>`;
                   }).join('')}
+                  <div style="display:inline-flex;gap:4px;margin-left:6px">
+                    <button type="button" class="btn sm" style="padding:1px 6px;font-size:10px" data-all-sec="${i}|1" title="Enable all 13 sections for ${esc(r.name)}">All</button>
+                    <button type="button" class="btn sm" style="padding:1px 6px;font-size:10px" data-all-sec="${i}|0" title="Clear all sections for ${esc(r.name)}">None</button>
+                  </div>
                 </div>
               </td>
               <td>
@@ -53,7 +107,7 @@ function teamRightsTable() {
     </div>
     <div style="display:flex;gap:10px;margin-top:8px;align-items:center">
       <button class="btn sm" data-ladd="team">+ Add team member</button>
-      <span class="help">Click section chips to assign section rights to each person.</span>
+      <span class="help">Click any section chip to toggle rights for each person independently. Use <b>All</b> to enable all 13 sections.</span>
     </div>
   `;
 }
@@ -240,8 +294,9 @@ function normalise(st) {
     }
     if (st.me.name) {
       const mySecs = SECTIONS.filter(s => {
-        const secAud = (st.secs[s.id] && st.secs[s.id].auditor || '').trim().toLowerCase();
-        return secAud === st.me.name.trim().toLowerCase();
+        const secAud = (st.secs[s.id] && st.secs[s.id].auditor || '');
+        const auds = secAud.split(/[,&]/).map(x => x.trim().toLowerCase());
+        return auds.includes(st.me.name.trim().toLowerCase());
       }).map(s => s.id);
       if (mySecs.length > 0) {
         st.me.sections = mySecs;
@@ -923,9 +978,9 @@ function bind() {
         return;
       }
     }
-    const t = e.target.closest('[data-go],[data-res],[data-act],[data-mk],[data-use],[data-rev],[data-arm],[data-zoom],[data-dl],[data-ladd],[data-lrm],[data-raise],[data-cadd],[data-cdel],[data-draft],[data-toggle-sec]');
+    const t = e.target.closest('[data-go],[data-res],[data-act],[data-mk],[data-use],[data-rev],[data-arm],[data-zoom],[data-dl],[data-ladd],[data-lrm],[data-raise],[data-cadd],[data-cdel],[data-draft],[data-toggle-sec],[data-all-sec]');
     if (!t) return; const d = t.dataset;
-        if (d.toggleSec) {
+    if (d.toggleSec) {
       const parts = d.toggleSec.split('|');
       let person = '';
       let sid = '';
@@ -941,13 +996,19 @@ function bind() {
       if (!person) {
         toast('Please enter the auditor name before assigning sections.');
       } else {
-        const current = (S.secs[sid].auditor || '').trim().toLowerCase();
-        if (current === person.toLowerCase()) {
-          S.secs[sid].auditor = '';
-        } else {
-          S.secs[sid].auditor = person;
-        }
-        save(); render(); toast(`${sid} assigned to ${S.secs[sid].auditor || 'unassigned'}`);
+        setSecAuditorToggle(sid, person);
+        save(); render(); toast(`${sid} updated for ${person}`);
+      }
+    } else if (d.allSec) {
+      const parts = d.allSec.split('|');
+      const idx = parseInt(parts[0], 10);
+      const enable = parts[1] === '1';
+      const person = (S.lists.team[idx] && S.lists.team[idx].name) ? S.lists.team[idx].name.trim() : '';
+      if (!person) {
+        toast('Please enter the auditor name before assigning sections.');
+      } else {
+        setAuditorAllSecs(person, enable);
+        save(); render(); toast(`${enable ? 'Assigned all 13 sections to' : 'Cleared sections for'} ${person}`);
       }
     } else if (d.go) { e.preventDefault(); go(d.go); }
     else if (d.res) setResult(d.res, d.v);
