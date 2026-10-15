@@ -399,6 +399,18 @@ def enforce_azure_auth():
     if not user:
         return redirect(url_for("login_view"))
         
+    # Dynamically refresh user info if email is known (ensures role updates take effect without manual re-login!)
+    email = user.get("email")
+    if email:
+        refreshed = find_authorized_user(email, full_name=user.get("name", ""))
+        if refreshed:
+            session["user"] = refreshed
+            user = refreshed
+
+    # If user is Lead Auditor and attempts to open an auditor view, redirect them to /master
+    if user.get("role") == "Lead Auditor" and path.startswith("/auditor"):
+        return redirect("/master")
+        
     # Role protection: Auditor cannot access /master
     if path == "/master" and user.get("role") != "Lead Auditor":
         return redirect(user.get("route", "/auditor1"))
@@ -408,6 +420,9 @@ def enforce_azure_auth():
 # ----------------------------------------------------
 @app.route("/")
 def index():
+    user = session.get("user")
+    if user:
+        return redirect(user.get("route", "/master"))
     return render_template("index.html", mode="portal", role_label="Portal", user=session.get("user"))
 
 @app.route("/master")
