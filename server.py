@@ -196,27 +196,45 @@ def get_authorized_team():
         ]
     return team
 
+def is_lead_auditor(email, full_name=""):
+    e = (email or "").strip().lower()
+    n = (full_name or "").strip().lower()
+    if any(k in e for k in ["srinivas.rao", "srinivas"]) or "srinivas" in n:
+        return True, "Srinivas Rao", e or "srinivas.rao@mgavia.com"
+    if any(k in e for k in ["sunny.sharma", "sunny"]) or "sunny" in n or "sharma" in n:
+        return True, "Sunny Sharma", e or "sunny.sharma@mgavia.com"
+    return False, None, None
+
 def find_authorized_user(email, full_name=""):
-    if not email:
+    email_clean = (email or "").strip().lower()
+    name_clean = (full_name or "").strip()
+    if not email_clean and not name_clean:
         return None
-    email_clean = email.strip().lower()
-    
-    # 1. Permanent Lead Auditors (Srinivas Rao and Sunny Sharma)
-    if email_clean in LEAD_AUDITOR_EMAILS:
-        name = "Srinivas Rao" if "srinivas" in email_clean else "Sunny Sharma"
+        
+    # 1. Lead Auditors (Srinivas Rao and Sunny Sharma) - matched by email or name
+    is_lead, canonical_name, canonical_email = is_lead_auditor(email_clean, name_clean)
+    if is_lead:
         # Auto-heal: Ensure role is Lead Auditor in database team list
         try:
             state = get_current_state()
             if "lists" in state and "team" in state["lists"]:
+                updated = False
                 for t in state["lists"]["team"]:
-                    if t.get("email", "").strip().lower() == email_clean:
+                    t_name = t.get("name", "").lower()
+                    t_email = t.get("email", "").lower()
+                    if ("sunny" in t_name or "sunny" in t_email) and "sunny" in canonical_name.lower():
                         t["role"] = "Lead Auditor"
-                save_current_state(state)
+                        updated = True
+                    if ("srinivas" in t_name or "srinivas" in t_email) and "srinivas" in canonical_name.lower():
+                        t["role"] = "Lead Auditor"
+                        updated = True
+                if updated:
+                    save_current_state(state)
         except Exception:
             pass
         return {
-            "name": name,
-            "email": email_clean,
+            "name": canonical_name,
+            "email": canonical_email or email_clean,
             "role": "Lead Auditor",
             "route": "/master",
             "index": 0
@@ -389,20 +407,39 @@ def logout_view():
     session.clear()
     return redirect(url_for("login_view"))
 
+@app.route("/health")
+@app.route("/api/version")
+def version_view():
+    user = session.get("user")
+    return {
+        "status": "ok",
+        "version": "lead_auditor_v4_universal",
+        "user": user
+    }
+
 @app.before_request
 def enforce_azure_auth():
     path = request.path
-    if path.startswith("/static/") or path in ["/login", "/login/ms", "/login/callback", "/logout", "/health"]:
+    if path.startswith("/static/") or path in ["/login", "/login/ms", "/login/callback", "/logout", "/health", "/api/version"]:
         return None
         
     user = session.get("user")
     if not user:
         return redirect(url_for("login_view"))
         
-    # Dynamically refresh user info if email is known (ensures role updates take effect without manual re-login!)
-    email = user.get("email")
-    if email:
-        refreshed = find_authorized_user(email, full_name=user.get("name", ""))
+    # Dynamically refresh user info if email or name is known
+    email = user.get("email", "")
+    name = user.get("name", "")
+    is_lead, canonical_name, canonical_email = is_lead_auditor(email, name)
+    if is_lead:
+        if user.get("role") != "Lead Auditor" or user.get("route") != "/master":
+            user["role"] = "Lead Auditor"
+            user["route"] = "/master"
+            user["name"] = canonical_name
+            session["user"] = user
+            session.modified = True
+    elif email:
+        refreshed = find_authorized_user(email, full_name=name)
         if refreshed:
             session["user"] = refreshed
             user = refreshed
@@ -422,6 +459,8 @@ def enforce_azure_auth():
 def index():
     user = session.get("user")
     if user:
+        if user.get("role") == "Lead Auditor":
+            return redirect("/master")
         return redirect(user.get("route", "/master"))
     return render_template("index.html", mode="portal", role_label="Portal", user=session.get("user"))
 
@@ -434,6 +473,8 @@ def master_view():
 @app.route("/auditor<int:num>")
 def auditor_n_view(num):
     user = session.get("user", {})
+    if user.get("role") == "Lead Auditor":
+        return redirect("/master")
     cfg = {
         "mode": "auditor",
         "instanceId": f"A{num}",
