@@ -178,7 +178,9 @@ def get_redirect_uri():
     proto = request.headers.get("X-Forwarded-Proto", "https" if ("onrender.com" in host or "trycloudflare.com" in host) else request.scheme)
     return f"{proto}://{host}/login/callback"
 
-# Permanent Fail-Safe Administrators: CANNOT be locked out even if team list is deleted
+# Permanent Lead Auditors (Full Master Control)
+LEAD_AUDITOR_EMAILS = {"srinivas.rao@mgavia.com", "sunny.sharma@mgavia.com"}
+
 PERMANENT_ADMINS = {
     "srinivas.rao@mgavia.com": {"name": "Srinivas Rao", "role": "Lead Auditor", "route": "/master", "index": 0},
     "sunny.sharma@mgavia.com": {"name": "Sunny Sharma", "role": "Lead Auditor", "route": "/master", "index": 0}
@@ -190,49 +192,81 @@ def get_authorized_team():
     if not team:
         return [
             {"name": "Srinivas Rao", "email": "srinivas.rao@mgavia.com", "role": "Lead Auditor", "base": "All Aerodromes"},
-            {"name": "Sunny Sharma", "email": "sunny.sharma@mgavia.com", "role": "Auditor", "base": "All Aerodromes"}
+            {"name": "Sunny Sharma", "email": "sunny.sharma@mgavia.com", "role": "Lead Auditor", "base": "All Aerodromes"}
         ]
     return team
 
-def find_authorized_user(email):
+def find_authorized_user(email, full_name=""):
     if not email:
         return None
     email_clean = email.strip().lower()
     
-    # 1. Check active database team list
+    # 1. Permanent Lead Auditors (Srinivas Rao and Sunny Sharma)
+    if email_clean in LEAD_AUDITOR_EMAILS:
+        name = "Srinivas Rao" if "srinivas" in email_clean else "Sunny Sharma"
+        # Auto-heal: Ensure role is Lead Auditor in database team list
+        try:
+            state = get_current_state()
+            if "lists" in state and "team" in state["lists"]:
+                for t in state["lists"]["team"]:
+                    if t.get("email", "").strip().lower() == email_clean:
+                        t["role"] = "Lead Auditor"
+                save_current_state(state)
+        except Exception:
+            pass
+        return {
+            "name": name,
+            "email": email_clean,
+            "role": "Lead Auditor",
+            "route": "/master",
+            "index": 0
+        }
+    
+    # 2. Check active database team list
     team = get_authorized_team()
     for i, m in enumerate(team):
         if m.get("email", "").strip().lower() == email_clean:
-            is_lead = "lead" in m.get("role", "").lower() or i == 0
+            is_lead = "lead" in m.get("role", "").lower()
             return {
-                "name": m.get("name") or email_clean.split("@")[0].title(),
+                "name": m.get("name") or full_name or email_clean.split("@")[0].title(),
                 "email": email_clean,
                 "role": "Lead Auditor" if is_lead else "Auditor",
                 "route": "/master" if is_lead else f"/auditor{i if i > 0 else 1}",
                 "index": i
             }
             
-    # 2. Permanent Fail-Safe Fallback: Auto-heal if accidentally deleted
-    if email_clean in PERMANENT_ADMINS:
-        admin_info = PERMANENT_ADMINS[email_clean].copy()
-        try:
-            state = get_current_state()
-            if "lists" not in state: state["lists"] = {}
-            if "team" not in state["lists"]: state["lists"]["team"] = []
-            if not any(t.get("email", "").strip().lower() == email_clean for t in state["lists"]["team"]):
-                state["lists"]["team"].insert(0, {
-                    "name": admin_info["name"],
-                    "email": email_clean,
-                    "role": "Lead Auditor",
-                    "base": "All Aerodromes"
-                })
-                save_current_state(state)
-                print(f"[Self-Healing Auth] Restored {admin_info['name']} ({email_clean}) to team table.")
-        except Exception as e:
-            print(f"[Self-Healing Notice] {e}")
-        return admin_info
-
-    return None
+    # 3. Automatic Colleague Enrollment
+    # Any authenticated employee logging in via company Microsoft 365 is welcomed as an Auditor
+    colleague_name = full_name or email_clean.split("@")[0].replace(".", " ").title()
+    try:
+        state = get_current_state()
+        if "lists" not in state: state["lists"] = {}
+        if "team" not in state["lists"]: state["lists"]["team"] = []
+        new_idx = len(state["lists"]["team"])
+        state["lists"]["team"].append({
+            "name": colleague_name,
+            "email": email_clean,
+            "role": "Auditor",
+            "base": "All Aerodromes"
+        })
+        save_current_state(state)
+        print(f"[Auto-Enrolled Colleague] Added {colleague_name} ({email_clean}) to team as Auditor {new_idx}.")
+        return {
+            "name": colleague_name,
+            "email": email_clean,
+            "role": "Auditor",
+            "route": f"/auditor{new_idx}",
+            "index": new_idx
+        }
+    except Exception as e:
+        print(f"[Auto-Enrollment Fallback] {e}")
+        return {
+            "name": colleague_name,
+            "email": email_clean,
+            "role": "Auditor",
+            "route": "/auditor1",
+            "index": 1
+        }
 
 LOGIN_PAGE_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -342,7 +376,7 @@ def login_callback():
     email = (claims.get("preferred_username") or claims.get("email") or claims.get("upn") or "").strip().lower()
     name = claims.get("name") or email.split("@")[0].title()
     
-    auth_user = find_authorized_user(email)
+    auth_user = find_authorized_user(email, full_name=name)
     if not auth_user:
         return render_template_string(ACCESS_DENIED_HTML, email=email), 403
         
